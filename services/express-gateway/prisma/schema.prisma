@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Represents the Admin / Staff user
+model Account {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+
+  workflows Workflow[] // One Admin can manage many workflows
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Workflow {
+  id           String   @id @default(uuid())
+  name         String
+  adminId      String   // Links to the Account that created this
+  openingTime  DateTime
+  closingTime  DateTime
+  bufferMins   Int
+  cutoffMins   Int
+  latitude     Float?
+  longitude    Float?
+
+  admin        Account  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  stages       Stage[]
+  tickets      Ticket[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Stage {
+  id           String    @id @default(uuid())
+  workflowId   String
+  name         String
+  orderIndex   Int
+  requiredDocs Json
+
+  workflow     Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  counters     Counter[] // A Stage has multiple Counters
+  tickets      Ticket[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Counter {
+  id           String   @id @default(uuid())
+  stageId      String
+  name         String   // e.g. "Counter A", "Desk 1"
+  status       String   @default("OPEN") // OPEN, PAUSED, FAULT
+  currentQueue Int      @default(0) // Go algorithm checks this to route users!
+
+  stage        Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  tickets      Ticket[] // Tickets assigned to this specific counter
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Ticket {
+  id                String   @id @default(uuid())
+  workflowId        String
+  phoneNumber       String
+  status            String   @default("WAITING") // WAITING, PROCESSING, COMPLETED, UNSCHEDULED
+  currentStageId    String?
+  assignedCounterId String?  // The specific Counter the user must walk to!
+  eta               DateTime?
+  qrToken           String   @unique
+
+  workflow          Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  currentStage      Stage?   @relation(fields: [currentStageId], references: [id], onDelete: SetNull)
+  assignedCounter   Counter? @relation(fields: [assignedCounterId], references: [id], onDelete: SetNull)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

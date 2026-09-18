@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import adminRoutes from './routes/adminRoutes.js';
+import registrationRoutes from './routes/registrationRoutes.js';
 
 const app = express();
 
@@ -8,6 +10,12 @@ app.use(cors());
 
 // Middleware: Parse incoming JSON payloads sent by the frontend
 app.use(express.json());
+
+// Mount the Admin Routes
+app.use('/api/admin', adminRoutes);
+
+// Mount the Public Registration Routes
+app.use('/api', registrationRoutes);
 
 // Health Check Endpoint (To verify Express is running)
 app.get('/health', (req, res) => {

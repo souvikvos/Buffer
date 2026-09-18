@@ -18,3 +18,9 @@ services/go-scheduler/*.exe
 
 # Personal reference files
 GLOSSARY.md
+
+# Prisma AI Agent auto-generated folders
+.agents/
+.claude/
+.cursor/
+.devin/
