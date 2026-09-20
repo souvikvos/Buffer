@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import adminRoutes from './routes/adminRoutes.js';
 import registrationRoutes from './routes/registrationRoutes.js';
+import staffRoutes from './routes/staffRoutes.js';
 
 const app = express();
 
@@ -13,6 +14,9 @@ app.use(express.json());
 
 // Mount the Admin Routes
 app.use('/api/admin', adminRoutes);
+
+// Mount the Staff Routes
+app.use('/api/staff', staffRoutes);
 
 // Mount the Public Registration Routes
 app.use('/api', registrationRoutes);

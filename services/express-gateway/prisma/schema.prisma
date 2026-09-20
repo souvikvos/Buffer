@@ -25,9 +25,10 @@ model Workflow {
   name         String
   adminId      String   // Links to the Account that created this
   openingTime  DateTime
-  closingTime  DateTime
-  bufferMins   Int
-  cutoffMins   Int
+  closingTime          DateTime
+  isStandaloneQueue    Boolean @default(false)
+  safeTravelCutoffTime DateTime
+  cutoffMins           Int
   latitude     Float?
   longitude    Float?
 
@@ -71,8 +72,12 @@ model Counter {
 model Ticket {
   id                String   @id @default(uuid())
   workflowId        String
-  phoneNumber       String
-  status            String   @default("WAITING") // WAITING, PROCESSING, COMPLETED, UNSCHEDULED
+  phoneNumber         String
+  age                 Int?
+  travelTimeMins      Int?
+  algorithmPhase      String?
+  requestTravelFactor Boolean @default(true)
+  status              String   @default("WAITING") // WAITING, PROCESSING, COMPLETED, UNSCHEDULED
   currentStageId    String?
   assignedCounterId String?  // The specific Counter the user must walk to!
   eta               DateTime?

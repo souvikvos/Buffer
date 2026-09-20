@@ -7,26 +7,26 @@ export const createWorkflow = async (req, res) => {
       adminId, 
       openingTime, 
       closingTime, 
-      bufferMins, 
+      isStandaloneQueue,
+      safeTravelCutoffTime,
       cutoffMins, 
       latitude, 
       longitude, 
       stages 
     } = req.body;
 
-    // Validate that we have an adminId
     if (!adminId) {
       return res.status(400).json({ error: 'adminId is required to create a workflow.' });
     }
 
-    // Use Prisma's nested write to create the Workflow, Stages, and Counters all at once!
     const newWorkflow = await prisma.workflow.create({
       data: {
         name,
-        adminId, // Connects this workflow to the specific Admin Account
+        adminId,
         openingTime: new Date(openingTime),
         closingTime: new Date(closingTime),
-        bufferMins,
+        isStandaloneQueue: isStandaloneQueue || false,
+        safeTravelCutoffTime: new Date(safeTravelCutoffTime),
         cutoffMins,
         latitude,
         longitude,
@@ -43,12 +43,9 @@ export const createWorkflow = async (req, res) => {
           }))
         }
       },
-      // Return the created workflow with its nested stages and counters for the response
       include: {
         stages: {
-          include: {
-            counters: true
-          }
+          include: { counters: true }
         }
       }
     });
