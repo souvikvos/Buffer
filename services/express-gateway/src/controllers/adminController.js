@@ -9,7 +9,7 @@ export const createWorkflow = async (req, res) => {
       closingTime, 
       isStandaloneQueue,
       safeTravelCutoffTime,
-      cutoffMins, 
+      registrationCutoffTime, 
       latitude, 
       longitude, 
       stages 
@@ -27,7 +27,7 @@ export const createWorkflow = async (req, res) => {
         closingTime: new Date(closingTime),
         isStandaloneQueue: isStandaloneQueue || false,
         safeTravelCutoffTime: new Date(safeTravelCutoffTime),
-        cutoffMins,
+        registrationCutoffTime: new Date(registrationCutoffTime),
         latitude,
         longitude,
         stages: {

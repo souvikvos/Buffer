@@ -27,8 +27,8 @@ model Workflow {
   openingTime  DateTime
   closingTime          DateTime
   isStandaloneQueue    Boolean @default(false)
-  safeTravelCutoffTime DateTime
-  cutoffMins           Int
+  safeTravelCutoffTime   DateTime
+  registrationCutoffTime DateTime
   latitude     Float?
   longitude    Float?
 

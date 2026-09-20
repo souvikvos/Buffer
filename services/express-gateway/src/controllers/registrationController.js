@@ -21,7 +21,7 @@ export const registerUser = async (req, res) => {
     const now = new Date();
 
     // 2. The Cutoff Check
-    const cutoffTime = new Date(workflow.closingTime.getTime() - (workflow.cutoffMins * 60000));
+    const cutoffTime = new Date(workflow.registrationCutoffTime);
     
     if (now > cutoffTime) {
       await prisma.ticket.create({
@@ -67,14 +67,15 @@ export const registerUser = async (req, res) => {
     // 5. The Hand-off: Send the payload to RabbitMQ for Ayana's Go Engine
     const rabbitPayload = {
       eventId: 'UserRegistrationEvent',
-      ticketId: newTicket.id,
-      workflowId: workflow.id,
-      phoneNumber,
+      user_id: newTicket.id,
+      workflow_stage: workflow.id,
+      name: phoneNumber,
       age,
-      travelTimeMins,
+      travel_time_minutes: travelTimeMins,
       algorithmPhase,
-      requestTravelFactor: wantsTravelFactor,
-      registeredAt: now.toISOString()
+      convenience_score: wantsTravelFactor ? 1.0 : 0.0,
+      registered_at: now.toISOString(),
+      deadline_time: workflow.safeTravelCutoffTime.toISOString()
     };
 
     publishToQueue('buffer_registration_queue', rabbitPayload);

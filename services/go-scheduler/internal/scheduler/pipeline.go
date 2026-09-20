@@ -54,18 +54,7 @@ func (p *Pipeline) ProcessPhaseBatch(batch []models.UserRegistrationEvent, w Wei
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	var eligible []models.UserRegistrationEvent
-
-	for _, evt := range batch {
-		if result, cutoff := ApplyCutoff(evt, p.Schedule.Close); cutoff {
-			log.Printf("scheduler: user_id=%s unscheduled (cutoff)", evt.UserID)
-			p.Out <- result
-			continue
-		}
-		eligible = append(eligible, evt)
-	}
-
-	scored := ScoreAndSortBatch(eligible, w)
+	scored := ScoreAndSortBatch(batch, w)
 	results := AssignBufferBatch(scored, p.slots)
 
 	candidates := make([]*SwapCandidate, 0, len(results))
@@ -99,11 +88,7 @@ func (p *Pipeline) ProcessFCFSUser(evt models.UserRegistrationEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if result, cutoff := ApplyCutoff(evt, p.Schedule.Close); cutoff {
-		log.Printf("scheduler: user_id=%s unscheduled (cutoff)", evt.UserID)
-		p.Out <- result
-		return
-	}
+
 
 	result := AssignFCFSUser(evt, p.slots)
 

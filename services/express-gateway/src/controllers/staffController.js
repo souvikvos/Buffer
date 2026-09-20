@@ -60,9 +60,9 @@ export const completeStudent = async (req, res) => {
     if (channel) {
       channel.sendToQueue('buffer_staff_queue', Buffer.from(JSON.stringify({
         type: 'COMPLETE_STUDENT',
-        ticketId,
+        user_id: ticketId,
         counterId,
-        timestamp: new Date().toISOString()
+        actual_end: new Date().toISOString()
       })));
     }
 
