@@ -15,9 +15,10 @@ export const setupWebSocket = (server) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const ticketId = url.searchParams.get('ticketId');
     const counterId = url.searchParams.get('counterId');
+    const adminId = url.searchParams.get('adminId');
     
     // The ID we will use to store the connection in the map
-    const connectionId = ticketId || counterId;
+    const connectionId = ticketId || counterId || adminId;
 
     if (!connectionId) {
       ws.close(1008, 'A ticketId or counterId is required to connect.');
@@ -26,7 +27,8 @@ export const setupWebSocket = (server) => {
 
     // Register the client
     clients.set(connectionId, ws);
-    console.log(`WebSocket: Client connected with ID: ${connectionId} (Type: ${ticketId ? 'Student' : 'Staff'})`);
+    const clientType = ticketId ? 'Student' : (counterId ? 'Staff' : 'Admin');
+    console.log(`WebSocket: Client connected with ID: ${connectionId} (Type: ${clientType})`);
 
     ws.on('close', () => {
       clients.delete(connectionId);
@@ -83,5 +85,26 @@ export const notifyStaff = async (counterId, eventType, message, payload = null)
       timestamp: new Date().toISOString()
     }));
     console.log(`WebSocket: Pushed Staff Alert to Counter ${counterId}`);
+  }
+};
+
+/**
+ * Sends a WebSocket message directly to the Admin dashboard.
+ * Express uses this to notify Admin of global issues or stuck counters.
+ */
+export const notifyAdmin = (adminId, eventType, message, payload = null) => {
+  // If no specific adminId is provided, we can broadcast to all connected admins.
+  // For simplicity here, we assume adminId is provided, or we just loop and find them.
+  // Assuming a single admin connection for now:
+  const ws = clients.get(adminId);
+  
+  if (ws && ws.readyState === 1) { // 1 = OPEN
+    ws.send(JSON.stringify({
+      type: eventType,
+      message,
+      data: payload,
+      timestamp: new Date().toISOString()
+    }));
+    console.log(`WebSocket: Pushed Admin Alert to ${adminId}`);
   }
 };

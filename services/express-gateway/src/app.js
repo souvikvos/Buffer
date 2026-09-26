@@ -3,6 +3,7 @@ import cors from 'cors';
 import adminRoutes from './routes/adminRoutes.js';
 import registrationRoutes from './routes/registrationRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
+import { authMiddleware } from './lib/auth.js';
 
 const app = express();
 
@@ -11,6 +12,9 @@ app.use(cors());
 
 // Middleware: Parse incoming JSON payloads sent by the frontend
 app.use(express.json());
+
+// Middleware: Clerk Auth - reads tokens to attach req.auth
+app.use(authMiddleware);
 
 // Mount the Admin Routes
 app.use('/api/admin', adminRoutes);

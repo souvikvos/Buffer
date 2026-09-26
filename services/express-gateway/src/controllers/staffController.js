@@ -153,53 +153,85 @@ export const updateCounterStatus = async (req, res) => {
   }
 };
 
-export const reallocateUser = async (req, res) => {
+
+
+
+
+export const getStageCounters = async (req, res) => {
   try {
-    const { ticketId } = req.params;
-    const { targetCounterId } = req.body;
-
-    // 1. Fetch ticket and target counter to verify stage matches
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: { currentStage: true }
+    const { stageId } = req.params;
+    const counters = await prisma.counter.findMany({
+      where: { stageId }
     });
-    
-    if (!ticket || !ticket.currentStageId) {
-      return res.status(404).json({ error: 'Ticket or current stage not found.' });
+    res.status(200).json({ counters });
+  } catch (error) {
+    console.error('Error fetching stage counters:', error);
+    res.status(500).json({ error: 'Failed to fetch counters.' });
+  }
+};
+
+export const claimCounter = async (req, res) => {
+  try {
+    const { counterId } = req.params;
+    const staffId = req.auth.userId;
+
+    const counter = await prisma.counter.findUnique({ where: { id: counterId } });
+    if (!counter) return res.status(404).json({ error: 'Counter not found.' });
+    if (counter.staffId && counter.staffId !== staffId) {
+      return res.status(403).json({ error: 'Counter is already claimed by another staff member.' });
     }
 
-    const targetCounter = await prisma.counter.findUnique({
-      where: { id: targetCounterId }
+    const updatedCounter = await prisma.counter.update({
+      where: { id: counterId },
+      data: { staffId, status: 'OPEN' }
     });
 
-    if (!targetCounter) {
-      return res.status(404).json({ error: 'Target counter not found.' });
-    }
-
-    if (ticket.currentStageId !== targetCounter.stageId) {
-      return res.status(400).json({ error: 'Cannot reallocate to a counter in a different stage.' });
-    }
-
-    // 2. Update the DB
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { assignedCounterId: targetCounterId }
-    });
-
-    // 3. Push to RabbitMQ for Ayana's Go Engine (recalculate ETAs at back of queue)
     const channel = getChannel();
     if (channel) {
       channel.sendToQueue('buffer_staff_queue', Buffer.from(JSON.stringify({
-        type: 'REALLOCATE_STUDENT',
-        ticketId,
-        targetCounterId,
+        type: 'UPDATE_COUNTER_STATUS',
+        counterId,
+        status: 'OPEN',
         timestamp: new Date().toISOString()
       })));
     }
 
-    res.status(200).json({ message: 'User reallocated successfully. Go Engine will recalculate ETAs.' });
+    res.status(200).json({ message: 'Counter claimed successfully.', counter: updatedCounter });
   } catch (error) {
-    console.error('Error reallocating user:', error);
-    res.status(500).json({ error: 'Failed to reallocate user.' });
+    console.error('Error claiming counter:', error);
+    res.status(500).json({ error: 'Failed to claim counter.' });
+  }
+};
+
+export const declaimCounter = async (req, res) => {
+  try {
+    const { counterId } = req.params;
+    const staffId = req.auth.userId;
+
+    const counter = await prisma.counter.findUnique({ where: { id: counterId } });
+    if (!counter) return res.status(404).json({ error: 'Counter not found.' });
+    if (counter.staffId !== staffId) {
+      return res.status(403).json({ error: 'You can only declaim a counter you own.' });
+    }
+
+    const updatedCounter = await prisma.counter.update({
+      where: { id: counterId },
+      data: { staffId: null, status: 'PAUSED' }
+    });
+
+    const channel = getChannel();
+    if (channel) {
+      channel.sendToQueue('buffer_staff_queue', Buffer.from(JSON.stringify({
+        type: 'UPDATE_COUNTER_STATUS',
+        counterId,
+        status: 'PAUSED',
+        timestamp: new Date().toISOString()
+      })));
+    }
+
+    res.status(200).json({ message: 'Counter declaimed successfully.', counter: updatedCounter });
+  } catch (error) {
+    console.error('Error declaiming counter:', error);
+    res.status(500).json({ error: 'Failed to declaim counter.' });
   }
 };

@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
 }
 
 // Represents the Admin / Staff user
@@ -27,7 +26,9 @@ model Workflow {
   openingTime  DateTime
   closingTime          DateTime
   isStandaloneQueue    Boolean @default(false)
-  safeTravelCutoffTime   DateTime
+  isPublic             Boolean @default(true)
+  inviteCode           String? @unique
+  safeTravelCutoffTime DateTime
   registrationCutoffTime DateTime
   latitude     Float?
   longitude    Float?
@@ -60,6 +61,7 @@ model Counter {
   stageId      String
   name         String   // e.g. "Counter A", "Desk 1"
   status       String   @default("OPEN") // OPEN, PAUSED, FAULT
+  staffId      String?  // The Clerk user ID of the staff member claiming this desk
   currentQueue Int      @default(0) // Go algorithm checks this to route users!
 
   stage        Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
@@ -82,6 +84,7 @@ model Ticket {
   assignedCounterId String?  // The specific Counter the user must walk to!
   eta               DateTime?
   qrToken           String   @unique
+  hasArrived        Boolean  @default(false)
 
   workflow          Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   currentStage      Stage?   @relation(fields: [currentStageId], references: [id], onDelete: SetNull)

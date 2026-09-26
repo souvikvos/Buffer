@@ -1,32 +1,49 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma.js';
 import { publishToQueue } from '../lib/rabbitmq.js';
+import { notifyStaff } from '../lib/websocket.js';
 
 export const registerUser = async (req, res) => {
   try {
-    const { workflowId, phoneNumber, age, travelTimeMins, requestTravelFactor } = req.body;
-    
+    const { workflowId, startingStageId, counterId, phoneNumber, age, travelTimeMins, requestTravelFactor } = req.body;
+
     // Default requestTravelFactor to true if not explicitly provided
     const wantsTravelFactor = requestTravelFactor !== undefined ? requestTravelFactor : true;
 
-    // 1. Validate Workflow exists
+    // 1. Validate Workflow exists and get its first Stage
     const workflow = await prisma.workflow.findUnique({
-      where: { id: workflowId }
+      where: { id: workflowId },
+      include: {
+        stages: {
+          orderBy: { orderIndex: 'asc' }
+        }
+      }
     });
 
-    if (!workflow) {
-      return res.status(404).json({ error: 'Queue not found.' });
+    if (!workflow || workflow.stages.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found or has no stages.' });
+    }
+
+    // If they provided a startingStageId, verify it belongs to this workflow. Otherwise default to the first stage.
+    let targetStageId = workflow.stages[0].id;
+    if (startingStageId) {
+      const isValidStage = workflow.stages.some(s => s.id === startingStageId);
+      if (!isValidStage) {
+        return res.status(400).json({ error: 'Invalid startingStageId for this workflow.' });
+      }
+      targetStageId = startingStageId;
     }
 
     const now = new Date();
 
     // 2. The Cutoff Check
     const cutoffTime = new Date(workflow.registrationCutoffTime);
-    
+
     if (now > cutoffTime) {
       await prisma.ticket.create({
         data: {
           workflowId,
+          currentStageId: targetStageId,
           phoneNumber,
           status: 'UNSCHEDULED',
           qrToken: crypto.randomBytes(16).toString('hex')
@@ -54,6 +71,8 @@ export const registerUser = async (req, res) => {
     const newTicket = await prisma.ticket.create({
       data: {
         workflowId,
+        currentStageId: targetStageId,
+        assignedCounterId: counterId || null, // Lock them in if they scanned a specific Queue QR
         phoneNumber,
         age,
         travelTimeMins,
@@ -68,7 +87,9 @@ export const registerUser = async (req, res) => {
     const rabbitPayload = {
       eventId: 'UserRegistrationEvent',
       user_id: newTicket.id,
-      workflow_stage: workflow.id,
+      workflow_id: workflow.id,
+      target_stage_id: targetStageId,
+      target_counter_id: counterId || null, // Go Engine skips Fairness algorithm if this is present
       name: phoneNumber,
       age,
       travel_time_minutes: travelTimeMins,
@@ -105,11 +126,33 @@ export const joinNextStage = async (req, res) => {
       return res.status(404).json({ error: 'Ticket not found.' });
     }
 
+    if (ticket.status !== 'COMPLETED') {
+      return res.status(403).json({ error: 'You must complete your current stage before joining the next one.' });
+    }
 
-    // The currentStageId will be updated by the Go Engine when it processes the event
+    // 1. Find the current stage they are in
+    const currentStage = await prisma.stage.findUnique({
+      where: { id: ticket.currentStageId }
+    });
+
+    // Find the immediate next stage in the workflow
+    const nextStage = await prisma.stage.findFirst({
+      where: {
+        workflowId: ticket.workflowId,
+        orderIndex: { gt: currentStage.orderIndex }
+      },
+      orderBy: { orderIndex: 'asc' }
+    });
+
+    if (!nextStage) {
+      return res.status(400).json({ error: 'No further stages in this workflow.' });
+    }
+
+    // Move them to the next stage in Postgres
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { 
+      data: {
+        currentStageId: nextStage.id,
         status: 'WAITING',
         assignedCounterId: null,
         algorithmPhase: 'FCFS' // Lock them into pure FCFS for all subsequent stages!
@@ -121,6 +164,7 @@ export const joinNextStage = async (req, res) => {
       eventId: 'JoinNextStageEvent',
       ticketId: updatedTicket.id,
       workflowId: updatedTicket.workflowId,
+      target_stage_id: nextStage.id, // Tell Go Engine exactly which stage they are joining
       timestamp: new Date().toISOString()
     };
 
@@ -134,5 +178,48 @@ export const joinNextStage = async (req, res) => {
   } catch (error) {
     console.error('Error joining next stage:', error);
     res.status(500).json({ error: 'Failed to join next stage.' });
+  }
+};
+
+export const updateArrivalStatus = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { hasArrived } = req.body; // Expect boolean: true (I am here) or false (I left)
+
+    if (hasArrived === undefined) {
+      return res.status(400).json({ error: 'Please provide hasArrived status.' });
+    }
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId }
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket not found.' });
+    }
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { hasArrived: Boolean(hasArrived) }
+    });
+
+    // If they just arrived, notify the staff!
+    if (hasArrived && updatedTicket.assignedCounterId) {
+      notifyStaff(
+        updatedTicket.assignedCounterId,
+        'STUDENT_ARRIVED',
+        `Student ${updatedTicket.phoneNumber} has physically arrived!`,
+        updatedTicket
+      );
+    }
+
+    res.status(200).json({
+      message: hasArrived ? 'Arrival confirmed! Please proceed to the waiting area.' : 'Status updated: You have left the waiting area.',
+      ticket: updatedTicket
+    });
+
+  } catch (error) {
+    console.error('Error updating arrival status:', error);
+    res.status(500).json({ error: 'Failed to update arrival status.' });
   }
 };

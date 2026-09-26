@@ -4,11 +4,17 @@ import {
   completeStudent, 
   skipStudent, 
   restoreStudent, 
-  updateCounterStatus, 
-  reallocateUser 
+  updateCounterStatus,
+  getStageCounters,
+  claimCounter,
+  declaimCounter
 } from '../controllers/staffController.js';
+import { strictAuth } from '../lib/auth.js';
 
 const router = express.Router();
+
+// Require a valid VIP token (JWT) to access any staff route
+router.use(strictAuth);
 
 // Staff Counter Queue Actions
 router.post('/counters/:counterId/next', callNextStudent);
@@ -18,6 +24,10 @@ router.patch('/counters/:counterId/status', updateCounterStatus);
 // Staff Ticket Actions
 router.post('/tickets/:ticketId/skip', skipStudent);
 router.post('/tickets/:ticketId/restore', restoreStudent);
-router.post('/tickets/:ticketId/reallocate', reallocateUser);
+
+// Staff Counter Claiming
+router.get('/stages/:stageId/counters', getStageCounters);
+router.post('/counters/:counterId/claim', claimCounter);
+router.post('/counters/:counterId/declaim', declaimCounter);
 
 export default router;
